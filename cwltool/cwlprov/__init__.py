@@ -1,21 +1,41 @@
 """Stores Research Object including provenance."""
 
+import ctypes
+import ctypes.wintypes
 import hashlib
 import os
-import pwd
+import platform
 import re
 import uuid
 from getpass import getuser
 from typing import IO, Any, Callable, Optional, TypedDict, Union
 
+try:
+    import pwd  # Available only on Unix-like systems
+except ImportError:
+    pwd = None
 
 def _whoami() -> tuple[str, str]:
     """Return the current operating system account as (username, fullname)."""
     username = getuser()
-    try:
-        fullname = pwd.getpwuid(os.getuid())[4].split(",")[0]
-    except (KeyError, IndexError):
-        fullname = username
+    fullname = username  # Default to username if fullname retrieval fails
+
+    if platform.system() == "Windows":
+        try:
+            # Use ctypes to get the full name via Windows API
+            user_info = ctypes.create_unicode_buffer(512)
+            size = ctypes.wintypes.DWORD(len(user_info))
+            result = ctypes.windll.secur32.GetUserNameExW(3, user_info, ctypes.byref(size))
+            if result != 0:
+                fullname = user_info.value
+        except Exception:
+            pass  # Fall back to username if anything fails
+    else:
+        if pwd:
+            try:
+                fullname = pwd.getpwuid(os.getuid())[4].split(",")[0]
+            except (KeyError, IndexError):
+                pass  # Fall back to username if anything fails
 
     return (username, fullname)
 
